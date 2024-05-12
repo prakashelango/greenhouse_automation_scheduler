@@ -1,0 +1,29 @@
+{
+  "name": "greenhouse_automation_scheduler",
+  "version": "1.0.0",
+  "description": "Samples for Cloud Functions for Firebase",
+  "author": "Firebase (https://firebase.google.com/)",
+  "license": "Apache-2.0",
+  "scripts": {
+    "bootstrap": "pnpm -r install",
+    "lint": "pnpm -r --workspace-concurrency=4 --aggregate-output run lint",
+    "test": "pnpm -r --workspace-concurrency=4 --aggregate-output run test ",
+    "compile": "pnpm -r --workspace-concurrency=4 --aggregate-output run compile "
+  },
+  "devDependencies": {
+    "eslint": "^8.44.0",
+    "pnpm": "^8.2.0",
+    "typescript": "^5.0.4"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "@firebase/app-compat",
+        "@firebase/app-types"
+      ]
+    }
+  }
+}

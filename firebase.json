@@ -1,0 +1,18 @@
+{
+  "hosting": {
+    "public": "public"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "greenhouse_automation_scheduler",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}
