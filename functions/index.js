@@ -1,84 +1,90 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
-
-const {onRequest} = require("firebase-functions/v2/https");
-const logger = require("firebase-functions/logger");
-const cron = require('node-cron');
-const moment = require('moment-timezone');
+const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-
-// Initialize Firebase Admin SDK
+const schedule = require('node-schedule');
 const serviceAccount = require('./firebase-serviceAccountKey.json');
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
-
-exports.helloWorld = onRequest((request, response) => {
-   logger.info("Hello logs!", {structuredData: true});
-   response.send("Hello from Firebase!");
-});
-
-logger.log("Logging successfully!", {structuredData: true});
-
+// Initialize Firebase Admin SDK
 admin.initializeApp({
-   credential: admin.credential.cert(serviceAccount),
-   databaseURL: 'https://flutter-d8e01-default-rtdb.firebaseio.com',
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: 'https://flutter-d8e01-default-rtdb.firebaseio.com',
 });
 
-// Function to send notifications to Android users
-const sendNotifications = async () => {
-   try {
-      // Retrieve FCM tokens from Firebase Realtime Database
-      // cWCp1UdtTHO_r6M0o2jhhY:APA91bE4hKt2QZI4GpIA3JDhMcBTBZ2V54nKakCjRQ4zRKWFO28PzA2NDSHoLm-mgkxWphrXGyashfIwgRAzCJHWzP6eV9uAfImzbBHu-tZBzxhSgyR8ywnGh_fYlvZP5zJ7fMcw8CPF
-      //const snapshot = await admin.database().ref('fcmTokens').once('value');
-      //const tokens = Object.values(snapshot.val() || {});
-      const tokens = Object.values('cWCp1UdtTHO_r6M0o2jhhY:APA91bE4hKt2QZI4GpIA3JDhMcBTBZ2V54nKakCjRQ4zRKWFO28PzA2NDSHoLm-mgkxWphrXGyashfIwgRAzCJHWzP6eV9uAfImzbBHu-tZBzxhSgyR8ywnGh_fYlvZP5zJ7fMcw8CPF' || {});
+// Replace with your desired notification data path (if different)
+const notificationDataRef = admin.database().ref('/user');
 
-      // Send notifications to each token
-      const payload = {
-         notification: {
-            title: 'Notification Title',
-            body: 'Notification Body',
-         },
-      };
 
-      const response = await admin.messaging().sendToDevice(tokens, payload);
-      console.log('Successfully sent notifications:', response);
-      response.results.forEach(result => {
-         const error = result.error;
-         if (error) {
-            console.error('Failure sending notification to', result.registrationToken, error);
-         }
-      });
-   } catch (error) {
-      console.error('Error sending notifications:', error);
-   }
-};
+exports.scheduledNotification = functions.pubsub
+    .schedule('22/30 * * * *') // Runs at 8:00 AM IST daily (replace with your desired schedule)
+    .onRun(async (context) => {
+        notificationDataRef.get()
+            .then(async (snapshot) => {
+                if (snapshot.exists()) {
+                    // Do something with the retrieved data
 
-// Function to be executed at 8 AM IST
-const task = () => {
-   console.log('Running scheduled task at 8 AM IST');
-   sendNotifications().then(r => console.log(r));
-};
+                    //console.log('Scheduled function triggered at:', context.timestamp);
 
-// Schedule the task to run at 8 AM IST every day
-const scheduledTask = cron.schedule('0 8 * * *', () => {
-   const currentTime = moment().tz('Asia/Kolkata').format('HH:mm:ss');
-   console.log(`Current time in IST: ${currentTime}`);
-   task();
-}, {
-   scheduled: true,
-   timezone: 'Asia/Kolkata',
-});
+                    // Fetch notification data from database
+                    const notificationSnapshot = await notificationDataRef.once('value');
+                    const notificationData = notificationSnapshot.val();
 
-// Start the scheduler
-//scheduledTask.start();
-task();
-// Log a message to indicate that the application is running
-console.log('Application is running...');
+                    // Check if any notifications are scheduled for today
+                    if (!notificationData) {
+                        console.log('No notifications scheduled for today.');
+                        return;
+                    }
+
+                    // Loop through each user's notification data
+                    for (const userEmail in notificationData) {
+                        const userNotification = notificationData[userEmail];
+
+                        // Construct the path to the user's FCM token based on email
+                        const fcmTokenRef = notificationDataRef.child(userEmail).child('greenhouseDetails');
+
+                        // Get all greenhouse IDs (replace 'Green1' with a dynamic way to fetch all)
+                        const greenhouseIds = Object.keys(userNotification.greenhouseDetails); // Assuming 'greenhouseDetails' contains greenhouse IDs as keys
+
+                        for (const greenhouseId of greenhouseIds) {
+                            // Construct the full path to the FCM token for the specific greenhouse
+                            const specificTokenRef = fcmTokenRef.child(greenhouseId).child('fcmToken');
+
+                            // Fetch FCM token for this specific greenhouse
+                            const fcmTokenSnapshot = await specificTokenRef.once('value');
+                            const fcmToken = fcmTokenSnapshot.val();
+                            console.log('fcmToken');
+                            console.log(fcmToken);
+                            if (!fcmToken) {
+                                console.warn(`No FCM token found for user ${userEmail}, greenhouse: ${greenhouseId}`);
+                                continue; // Skip to next greenhouse for this user if no token
+                            }
+
+                            // Prepare notification payload (consider including greenhouse details if needed)
+                            const payload = {
+                                notification: {
+                                    title: 'Irrigation Alert',
+                                    body: 'Ready to Irrigate',
+                                },
+                                token: fcmToken,
+                            };
+
+                            // Send notification using FCM messaging
+                            const messaging = admin.messaging();
+                            await messaging.send(payload)
+                                .then((response) => {
+                                    console.log(`Successfully sent notification to user ${userEmail}, greenhouse ${greenhouseId}:`, response);
+                                })
+                                .catch((error) => {
+                                    console.error(`Error sending notification to user ${userEmail}, greenhouse ${greenhouseId}:`, error);
+                                });
+                        }
+                    }
+
+                } else {
+                    console.log('No data available');
+                }
+            })
+            .catch((error) => {
+                console.error(error);
+            });
+    });
+
+    //});
