@@ -14,7 +14,7 @@ const notificationDataRef = admin.database().ref('/user');
 
 
 exports.scheduledNotification = functions.pubsub
-    .schedule('0 3 * * *') // This cron expression runs at 3:00 AM UTC (8:00 AM IST)
+    .schedule('0 6 * * *')
     .timeZone('Asia/Kolkata')
     .onRun(async (context) => {
         notificationDataRef.get()
